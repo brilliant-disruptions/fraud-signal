@@ -10,6 +10,10 @@ class AppConfig {
   static bool get useSupabase => supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
   static const appName = 'Fraud Signal';
 
+  /// Demo only: when true, any email and password signs in as an internal
+  /// reviewer so testers can get in without an invite. Ignored with Supabase.
+  static const openDemoSignIn = bool.fromEnvironment('OPEN_DEMO_SIGNIN', defaultValue: true);
+
   /// Demo only: sign in as this demo account on launch (for screenshots and
   /// walkthroughs). Ignored when Supabase is configured.
   static const demoAutoSignIn = String.fromEnvironment('DEMO_AUTO_SIGNIN');

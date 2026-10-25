@@ -217,7 +217,7 @@ class DemoBanner extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Demo data. Every identifier is synthetic. Sign in as reviewer@, analyst@, counsel@ or compliance@demo.fraudsignal with password "demo".',
+              'Demo build. Every identifier is synthetic. Any email signs in; the sign-in screen lists the demo roles.',
               style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onTertiaryContainer),
             ),
           ),

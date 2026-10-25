@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config.dart';
 import '../../core/providers.dart';
+import '../../data/demo_data.dart' show demoUsers, demoOrgs;
+import '../../domain/models.dart';
 import '../../widgets/common.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
@@ -26,14 +28,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    if (!_form.currentState!.validate()) return;
+  Future<void> _submit() => _signIn(_email.text, _password.text, validate: true);
+
+  Future<void> _signIn(String email, String password, {bool validate = false}) async {
+    if (validate && !_form.currentState!.validate()) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await ref.read(repositoryProvider).signIn(email: _email.text, password: _password.text);
+      await ref.read(repositoryProvider).signIn(email: email, password: password);
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -41,9 +45,15 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     }
   }
 
+  String _orgLabel(AppUser u) {
+    final org = demoOrgs.where((o) => o.id == u.orgId).firstOrNull;
+    return org == null ? u.orgId : '${org.name} (${org.offer.label})';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final openDemo = !AppConfig.useSupabase && AppConfig.openDemoSignIn;
     return Scaffold(
       body: SafeArea(
         child: Column(children: [
@@ -77,7 +87,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                       Text('Sign in', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 6),
                       Text(
-                        'Invite-only. Accounts are issued to verified organizations. Every lead view is logged with a timestamp.',
+                        openDemo
+                            ? 'Demo build. Enter any email to sign in as an internal reviewer, or pick a demo role below. Every lead view is logged with a timestamp.'
+                            : 'Invite-only. Accounts are issued to verified organizations. Every lead view is logged with a timestamp.',
                         style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                       ),
                       const SizedBox(height: 24),
@@ -95,7 +107,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         obscureText: true,
                         autofillHints: const [AutofillHints.password],
                         decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
-                        validator: (v) => (v == null || v.isEmpty) ? 'Enter your password' : null,
+                        validator: (v) => (!openDemo && (v == null || v.isEmpty)) ? 'Enter your password' : null,
                         onFieldSubmitted: (_) => _submit(),
                       ),
                       if (_error != null) ...[
@@ -110,14 +122,38 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                             ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
                             : const Text('Sign in'),
                       ),
-                      const SizedBox(height: 28),
+                      if (openDemo) ...[
+                        const SizedBox(height: 24),
+                        Text('Demo roles', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 8),
+                        for (final u in demoUsers)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: OutlinedButton(
+                              onPressed: _busy ? null : () => _signIn(u.email, 'demo'),
+                              style: OutlinedButton.styleFrom(
+                                alignment: Alignment.centerLeft,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              ),
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text('${u.role.label} · ${_orgLabel(u)}',
+                                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                Text(u.role.description,
+                                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                              ]),
+                            ),
+                          ),
+                      ],
+                      const SizedBox(height: 20),
                       const RiskIndicatorNotice(dense: true),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Need access? Organization accounts are opened by invitation after identity verification. Ask your Fraud Signal contact.',
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                        textAlign: TextAlign.center,
-                      ),
+                      if (!openDemo) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Need access? Organization accounts are opened by invitation after identity verification. Ask your Fraud Signal contact.',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ]),
                   ),
                 ),
