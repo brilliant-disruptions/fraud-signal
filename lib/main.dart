@@ -17,7 +17,7 @@ Future<void> main() async {
     await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
     repository = SupabaseRepository(Supabase.instance.client);
   } else {
-    final demo = DemoRepository();
+    final demo = DemoRepository(openSignIn: AppConfig.openDemoSignIn);
     if (AppConfig.demoAutoSignIn.isNotEmpty) {
       await demo.signIn(email: AppConfig.demoAutoSignIn, password: 'demo');
     }

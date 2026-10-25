@@ -8,13 +8,17 @@ import 'repository.dart';
 /// In-memory repository seeded with synthetic data. Used when no Supabase
 /// configuration is supplied, so the app runs anywhere for demos and tests.
 class DemoRepository implements FraudSignalRepository {
-  DemoRepository({this.latency = const Duration(milliseconds: 250)}) {
+  DemoRepository({this.latency = const Duration(milliseconds: 250), this.openSignIn = true}) {
     _leads = List.of(demoLeads);
     _screens = List.of(demoScreens);
     _log = List.of(demoAccessLog);
   }
 
   final Duration latency;
+
+  /// When true, unknown emails are admitted as an internal reviewer and the
+  /// password is not checked. Testers can get in without an invite.
+  final bool openSignIn;
   final _userController = StreamController<AppUser?>.broadcast();
   final _leadsController = StreamController<List<Lead>>.broadcast();
   final _screensController = StreamController<List<ScreenRequest>>.broadcast();
@@ -40,8 +44,20 @@ class DemoRepository implements FraudSignalRepository {
   Future<AppUser> signIn({required String email, required String password}) async {
     await _wait();
     final normalized = email.trim().toLowerCase();
-    final user = demoUsers.where((u) => u.email == normalized).firstOrNull;
-    if (user == null || password != 'demo') {
+    var user = demoUsers.where((u) => u.email == normalized).firstOrNull;
+    if (user == null && openSignIn && normalized.contains('@')) {
+      final local = normalized.split('@').first;
+      user = AppUser(
+        id: 'u_${local.hashCode.toRadixString(16)}',
+        email: normalized,
+        displayName: local.isEmpty ? 'Tester' : local[0].toUpperCase() + local.substring(1),
+        role: Role.reviewer,
+        orgId: demoInternalOrg.id,
+      );
+    } else if (user != null && !openSignIn && password != 'demo') {
+      user = null;
+    }
+    if (user == null) {
       throw AuthException('Invite-only. That email is not on an organization account, or the password is wrong.');
     }
     _user = user;

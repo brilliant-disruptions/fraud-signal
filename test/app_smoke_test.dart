@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fraud_signal/app.dart';
 import 'package:fraud_signal/core/providers.dart';
 import 'package:fraud_signal/data/demo_repository.dart';
+import 'package:fraud_signal/domain/models.dart';
 import 'package:fraud_signal/features/leads/lead_detail_screen.dart';
 import 'package:fraud_signal/features/screens/screens_screen.dart';
 
@@ -16,12 +17,12 @@ Future<void> settle(WidgetTester tester) =>
     tester.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, const Duration(seconds: 5));
 
 void main() {
-  testWidgets('invite-only sign-in rejects unknown accounts and admits demo reviewer', (tester) async {
+  testWidgets('invite-only sign-in rejects unknown accounts when closed and admits demo reviewer', (tester) async {
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
-    final repo = DemoRepository(latency: Duration.zero);
+    final repo = DemoRepository(latency: Duration.zero, openSignIn: false);
     await tester.pumpWidget(_app(repo));
     await settle(tester);
 
@@ -91,6 +92,17 @@ void main() {
     await tester.tap(find.text('Screens'));
     await settle(tester);
     expect(find.byType(FloatingActionButton), findsNothing);
+  });
+
+  test('open demo sign-in admits any email as an internal reviewer', () async {
+    final repo = DemoRepository(latency: Duration.zero);
+    final user = await repo.signIn(email: 'Tester@Example.com', password: '');
+    expect(user.email, 'tester@example.com');
+    expect(user.role, Role.reviewer);
+    expect(user.orgId, 'org_bd');
+    // Known demo accounts keep their role.
+    final counsel = await repo.signIn(email: 'counsel@demo.fraudsignal', password: 'anything');
+    expect(counsel.role, Role.viewer);
   });
 
   test('NPI check digit', () {
