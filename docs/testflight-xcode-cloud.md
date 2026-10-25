@@ -2,10 +2,21 @@
 
 Everything the iOS build needs is in the repo:
 
-- `ios/ci_scripts/ci_post_clone.sh` installs Flutter and CocoaPods on the Xcode Cloud runner, writes `ios/Flutter/Generated.xcconfig`, and runs `pod install`. Xcode Cloud runs it automatically because it sits next to `Runner.xcworkspace`.
-- `ios/Podfile` pins iOS 15.
+- `ios/ci_scripts/ci_post_clone.sh` installs Flutter on the Xcode Cloud runner and writes `ios/Flutter/Generated.xcconfig` plus the generated plugin Swift package. Xcode Cloud runs it automatically because it sits next to `Runner.xcworkspace`. Plugins are Swift packages, so there is no Podfile and no `pod install`.
 - `ios/Runner/Info.plist` sets `ITSAppUsesNonExemptEncryption` to false (HTTPS only), which skips the export-compliance prompt on every TestFlight build.
 - Bundle identifier: `com.brilliantdisruptions.fraudSignal`. Version `0.1.0`, build `1` (from `pubspec.yaml`). Xcode Cloud replaces the build number with its own on each archive.
+
+## Why the Xcode target is called FraudSignal
+
+Every `flutter create` project ships an Xcode target named `Runner` with the same internal identifiers. Xcode Cloud derives a product's identity partly from the target, so onboarding a second Flutter app re-points the existing product (and drags its workflows along) instead of creating a new one. Apple developers report the same behavior in [this thread](https://developer.apple.com/forums/thread/839723). This project's target is therefore named `FraudSignal`. The product stays `Runner.app` and the scheme stays `Runner`, so every Flutter command works unchanged.
+
+If a Cardex (or other) workflow still shows under this product in App Store Connect, untangle it once:
+
+1. App Store Connect → Apps → Fraud Signal → Xcode Cloud → Settings → **Delete Xcode Cloud Data**. This removes the merged product and its workflows; builds are not affected.
+2. Do the same on the other app if its product is also wrong.
+3. On the Mac, quit Xcode and clear `~/Library/Developer/Xcode/UserData/XcodeCloud`.
+4. Open each project in its own Xcode launch and re-create its workflow (section 3 below). Make sure the scheme shown in the toolbar is `Runner` for that project before Integrate → Create Workflow.
+5. Commit any `ios/Runner.xcodeproj/xcshareddata/xcodecloud/manifest.json` Xcode writes.
 
 ## 1. Register the app
 
@@ -18,7 +29,7 @@ Everything the iOS build needs is in the repo:
 git clone https://github.com/michaeljwilt/fraud-signal.git
 cd fraud-signal
 flutter pub get
-cd ios && pod install && cd ..
+flutter build ios --config-only --no-codesign
 open ios/Runner.xcworkspace
 ```
 
@@ -46,7 +57,8 @@ App Store Connect → TestFlight → Internal Testing → your group → add App
 | --- | --- |
 | `Generated.xcconfig must exist` | The post-clone script did not run. Confirm the file is at `ios/ci_scripts/ci_post_clone.sh` and executable (`git ls-files -s ios/ci_scripts` shows mode `100755`). |
 | Code signing error | Signing & Capabilities must be automatic with a team selected, committed in `project.pbxproj`. Xcode Cloud uses cloud-managed signing; do not add manual profiles. |
-| `pod install` fails on a plugin | Bump `platform :ios` in `ios/Podfile` to what the plugin requires and match `IPHONEOS_DEPLOYMENT_TARGET` in Xcode. |
+| `No valid code signing certificates were found` in `ci_post_clone.log` | The script ran `flutter build ios` without `--no-codesign`. Keep that flag; Xcode Cloud signs the archive in its own step. |
+| A plugin needs a newer iOS | Raise `IPHONEOS_DEPLOYMENT_TARGET` in Xcode (Runner project and target). |
 | Build number rejected as a duplicate | Xcode Cloud normally sets its own build number. If you turned that off in the workflow's archive action, bump `+N` in `pubspec.yaml`. |
 
 ## Later
