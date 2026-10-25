@@ -1,7 +1,8 @@
 #!/bin/sh
 # Xcode Cloud post-clone step for a Flutter app.
-# Installs Flutter, generates the iOS build config, and installs pods so the
-# Runner archive action can build. Xcode Cloud runs this from ios/ci_scripts.
+# Installs Flutter and generates the iOS build config so the Runner archive
+# action can build. Plugins are Swift packages, so there is no CocoaPods step.
+# Xcode Cloud runs this from ios/ci_scripts.
 set -e
 
 FLUTTER_CHANNEL="${FLUTTER_CHANNEL:-stable}"
@@ -21,11 +22,9 @@ DEFINES=""
 if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
   DEFINES="--dart-define=SUPABASE_URL=$SUPABASE_URL --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
 fi
-# Writes ios/Flutter/Generated.xcconfig (including DART_DEFINES) without building.
-flutter build ios --release --config-only $DEFINES
-
-echo "Installing CocoaPods"
-HOMEBREW_NO_AUTO_UPDATE=1 brew install cocoapods
-cd ios
-pod install
+# Writes ios/Flutter/Generated.xcconfig (including DART_DEFINES) and the
+# generated Swift package without building. --no-codesign is required here:
+# the runner has no signing identity at this point; Xcode Cloud signs the
+# archive itself in the next step.
+flutter build ios --release --config-only --no-codesign $DEFINES
 exit 0
