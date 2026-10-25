@@ -1,0 +1,55 @@
+# TestFlight via Xcode Cloud
+
+Everything the iOS build needs is in the repo:
+
+- `ios/ci_scripts/ci_post_clone.sh` installs Flutter and CocoaPods on the Xcode Cloud runner, writes `ios/Flutter/Generated.xcconfig`, and runs `pod install`. Xcode Cloud runs it automatically because it sits next to `Runner.xcworkspace`.
+- `ios/Podfile` pins iOS 15.
+- `ios/Runner/Info.plist` sets `ITSAppUsesNonExemptEncryption` to false (HTTPS only), which skips the export-compliance prompt on every TestFlight build.
+- Bundle identifier: `com.brilliantdisruptions.fraudSignal`. Version `0.1.0`, build `1` (from `pubspec.yaml`). Xcode Cloud replaces the build number with its own on each archive.
+
+## 1. Register the app
+
+1. Apple Developer → Certificates, Identifiers & Profiles → Identifiers → **+** → App IDs → App. Description `Fraud Signal`, Bundle ID explicit `com.brilliantdisruptions.fraudSignal`. No capabilities needed. Register.
+2. App Store Connect → Apps → **+** → New App. Platform iOS, name `Fraud Signal`, primary language, the bundle ID above, any SKU (e.g. `fraud-signal-ios`), full access. Create.
+
+## 2. Open the project once on a Mac
+
+```sh
+git clone https://github.com/michaeljwilt/fraud-signal.git
+cd fraud-signal
+flutter pub get
+cd ios && pod install && cd ..
+open ios/Runner.xcworkspace
+```
+
+In Xcode select the Runner target → Signing & Capabilities → tick **Automatically manage signing** and pick your team. Commit the `project.pbxproj` change if Xcode makes one (it writes `DEVELOPMENT_TEAM`).
+
+## 3. Create the Xcode Cloud workflow
+
+1. Xcode → **Integrate → Create Workflow…** (or Product → Xcode Cloud → Create Workflow). Choose the **Runner** product.
+2. Grant Xcode Cloud access to GitHub when prompted. It installs the Xcode Cloud GitHub App on `michaeljwilt/fraud-signal`.
+3. Edit the workflow before saving:
+   - **General**: name `TestFlight`, repository `fraud-signal`, primary branch `main`.
+   - **Environment**: latest released Xcode and macOS. Add environment variables only if you want a production build: `SUPABASE_URL` and `SUPABASE_ANON_KEY` (mark secret). Leave them out for the demo build.
+   - **Start Conditions**: Branch Changes on `main`, or Manual while you iterate.
+   - **Actions**: Archive, platform iOS, scheme Runner, deployment preparation **TestFlight (Internal Testing Only)**. Delete the default Build/Test actions if present (the Flutter unit tests run with `flutter test`, not here).
+   - **Post-Actions**: TestFlight Internal Testing → pick a group (create one in App Store Connect → TestFlight → Internal Testing first). Add a notify-on-failure email if you like.
+4. Save, then **Start Build**. The first run takes about 15 minutes: Flutter clone, precache, pod install, archive, upload.
+
+## 4. Testers
+
+App Store Connect → TestFlight → Internal Testing → your group → add App Store Connect users. They get an email; the TestFlight app installs the build. Internal builds do not need Beta App Review.
+
+## Check these when a build fails
+
+| Symptom | Fix |
+| --- | --- |
+| `Generated.xcconfig must exist` | The post-clone script did not run. Confirm the file is at `ios/ci_scripts/ci_post_clone.sh` and executable (`git ls-files -s ios/ci_scripts` shows mode `100755`). |
+| Code signing error | Signing & Capabilities must be automatic with a team selected, committed in `project.pbxproj`. Xcode Cloud uses cloud-managed signing; do not add manual profiles. |
+| `pod install` fails on a plugin | Bump `platform :ios` in `ios/Podfile` to what the plugin requires and match `IPHONEOS_DEPLOYMENT_TARGET` in Xcode. |
+| Build number rejected as a duplicate | Xcode Cloud normally sets its own build number. If you turned that off in the workflow's archive action, bump `+N` in `pubspec.yaml`. |
+
+## Later
+
+- Production backend: add the two Supabase variables to the workflow environment; the script passes them as `--dart-define`.
+- External TestFlight groups need Beta App Review once; same workflow, change the post-action to External Testing.
